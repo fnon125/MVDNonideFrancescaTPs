@@ -1,0 +1,64 @@
+### Librerías
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(dplyr)
+library(stringi)
+```
+
+### Leer CSVs
+
+En primer lugar, creo una función que me facilite la lectura de los archivos csv. Tengo que ponerle la ruta del archivo y la cantidad de filas que tiene que omitir. Esto ultimo es necesario en el caso del archivo de internet_users_world_wide porque las primeras filas no tienen los nombres de las columnas (si ponia solo read.csv no leia bien el archivo y terminaba eliminando columnas que en verdad eran importantes para el analisis).
+
+```{r}
+cargar_datos <- function(path, skip = 0) {
+  datos <- read.csv(path, skip = skip)
+  print(names(datos))
+  return(datos)
+}
+
+#les doy las rutas y, en caso de que sea necesaqrio, lo que tiene que skippear
+data_internet <- cargar_datos("../data/internet_users_world_wide.csv", skip = 4)
+data_metadata <- cargar_datos("../data/metadata_countries_internet_users.csv")
+```
+
+En esta instancia podemos notar que las columnas de data_internet tienen en su mayoria nombres de años y comienzan con la letra X. Data_metadata tiene seis variables. Ambas tienen una columna vacia al final.
+
+### Normalizacion
+
+Normalizo los dataframes (similar a la que hicimos en la clase tutorial 3). Con Clean_names sacamos los espacios de los nombres de las variables y con remove_empty eliminamos las columnas que estan vacias de cada data frame.
+
+```{r}
+data_internet <- data_internet %>%
+  janitor::clean_names() %>%
+  janitor::remove_empty(which = "cols")
+
+data_internet # chequeo que haya eliminado la columna del final y que haya limpiado los nombres de las variables
+
+data_metadata <- data_metadata %>%
+  janitor::clean_names() %>%
+  janitor::remove_empty(which = "cols")
+
+data_metadata # hago lo mismo para data_metadata
+```
+
+### Pivoteo
+
+Transformo la bbdd de formato wide a long con pivot_longer. Este toma todas las columnas que empiezan con "x" (porque en este caso son los años) y los agrupa en una nueva variable "year", mientras que sus valores se guardan en una nueva variable "porcentaje". Dejamos de ver una columna distinta para cada año, haciendo mas facil el analisis de los datos.
+
+```{r}
+internet <- data_internet %>%
+  pivot_longer(
+    cols = starts_with("x"),
+    names_to = "year", 
+    values_to = "porcentaje"
+  )
+```
+
+Para limpiar las X usamos la funcion str_remove_all() de la libreria stringi para que elimine las "x" de la columna "year" (similar a lo que vimos en la tutorial 3).
+
+```{r}
+internet <- internet %>%
+  mutate(year = str_remove_all(year, "x")) #reemplazo x por ""
+```
