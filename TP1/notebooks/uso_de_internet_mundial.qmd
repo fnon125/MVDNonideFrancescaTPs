@@ -56,9 +56,81 @@ internet <- data_internet %>%
   )
 ```
 
-Para limpiar las X usamos la funcion str_remove_all() de la libreria stringi para que elimine las "x" de la columna "year" (similar a lo que vimos en la tutorial 3).
+Para limpiar las X usamos la funcion str_remove_all() de la libreria stringi para que elimine las "x" de la columna "year" (similar a lo que vimos en la tutorial 3). Con as.numeric transformamos los valores de "year" a numéricos ya que antes eran tomados como datos de tipo character. Con "porcentaje" no hace falta ya que son de tipo numéricos.
 
 ```{r}
 internet <- internet %>%
-  mutate(year = str_remove_all(year, "x")) #reemplazo x por ""
+  mutate(
+    year = str_remove_all(year, "x"), #reemplazo x por ""
+    year = as.numeric(year)) # transformo a numericos
+  
 ```
+
+### Cruce de datos y limpieza de NAs
+
+Quiero hacer un left join para unir la base de uso de internet con la base de metadata. Especificamente el procentaje de uso de internet por pais y año segun el grupo de ingreso y region.
+
+```{r}
+internet_join <- left_join(internet, data_metadata, by = "country_code") #que el join se haga en base a country_code ya que es la columna que tienen en común ambas tablas 
+```
+
+En esta instancia podemos notar que tenemos obs vacias en region e income_group pero, al hacer un analisis de los datos, podemos notar que son observaciones que no corresponden a paises sino a grupos (Small states, Pacific island small states, agrupaciones por income, entre otros). Es decir, no todas las observaciones de country_name corresponden a nombres de paises. Por otro lado, tambien notamos missing values en "porcentaje", entendiendo que hubo paises que para ciertos años no reportaron datos.
+
+```{r}
+internet_join <- internet_join %>%
+  filter(
+    region != "", 
+    income_group != "",
+    !is.na(porcentaje)
+  ) 
+#tanto en region como en income no aplica !is.na ya que no son NAs sino observaciones vacias. Busco filtrar las filas de refion y de income_group que no sean " ". A su vez, busco quedarme solo con las filas de porcentaje que no son NAs
+```
+
+### Factores y agregación
+
+Ordenamos los grupos de ingresos (de menor ingreso a mayor ingreso) con la función factor() para que mantengan esta jerarquia y no aparezcan en orden alfabético.
+
+```{r}
+table(internet_join$income_group) # para ver las categorias que tengo que ordenar 
+internet_join <- internet_join %>%
+  mutate(
+    income_group = factor(income_group, 
+                          levels = c(
+                            "Low income",
+                            "Lower middle income",
+                            "Upper middle income",
+                            "High income"))
+  )
+```
+
+Agrupamos los datos por ingresos y año con group_by() y con summarize buscamos ver cuál fue el promedio de uso de internet en cada caso. A su vez, tenemos que filtrar para analizar unicamente los datos desde 2013 a 2023.
+
+```{r}
+# agrupamos segun region y año y con summarize calculamos el promedio para cada grupo. 
+hip_internet <- internet_join %>%
+  filter(year >= 2013, year <= 2023) %>%
+  group_by(year, income_group) %>%
+  summarize(
+    promedio = mean(porcentaje, na.rm = TRUE), #similar a lo que hicimos en la tut 1.
+    .groups = "drop")
+
+hip_internet
+```
+
+Transformamos de formato long a wide para que nuestras categorias de ingresos se vuelvan nombres de columnas y, asi, facilitar la posterior lectura de los datos.
+
+```{r}
+hip_internet <- hip_internet %>%
+  pivot_wider(
+    names_from = income_group, #los nombres que quiero que tengan las columnas
+    values_from = promedio #los valores que quiero que tengan las obs.  
+  )
+
+hip_internet <- hip_internet %>%
+  mutate(
+    indicator_name = "Proporción de la población que usa internet (%)") # agrego al final una nueva columna con el nombre de los indicadores.  
+
+hip_internet
+```
+
+### 
