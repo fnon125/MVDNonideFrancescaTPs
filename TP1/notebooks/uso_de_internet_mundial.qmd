@@ -133,4 +133,16 @@ hip_internet <- hip_internet %>%
 hip_internet
 ```
 
-### 
+### Analisis 
+
+"En la última década (2013-2023), las regiones compuestas por países de ingresos bajos (Low income y Lower middle income) han mostrado una tasa de crecimiento porcentual en el acceso a internet superior a la de las regiones de ingresos altos (Upper middle income y High Income), aunque su penetración absoluta siga siendo significativamente menor." 
+
+![](images/Captura de pantalla 2026-03-27 a la(s) 3.32.10 p. m..png)
+
+Tal como afirma la hipotesis, podemos ver que, si bien todos los grupos de ingreso tuvieron crecimiento, los paises deingresos bajos (low income y lower middle income) presentan mayores tasas de crecimiento en el acceso a internet. En 2013 solo el 18% de la poblacion con ingresos medios-bajos usaba internet y, para el 2023, ese porcentaje aumentó a 56%. A su vez, podemos destacar que la penetracion absoluta del acceso a internet sigue siendo significativamente menor en aquellas poblaciones con ingresos bajos ya que para el 2023 los grupos de ingresos altos tenian niveles de uso del 79% y 91%.
+
+### Entregable final
+
+```{r}
+write.csv(hip_internet, "../output/resultado_hipotesis.csv")
+```
