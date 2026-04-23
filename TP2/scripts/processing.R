@@ -6,7 +6,7 @@
 
 ####
 
-##### creo carpeta data ##### 
+##### creo carpeta output ##### 
 output_dir <- here("TP2", "output")
 if (!dir.exists(output_dir)) {
   dir.create(output_dir)
