@@ -54,7 +54,9 @@ ggplot(frecuencia_terminos, aes(x = lemma, y = frecuencia_total)) +
     title = "Frecuencia de términos de interés",
     subtitle = "Comunicados de prensa OEA - Enero a Abril 2026",
     x = "Término",
-    y = "Frecuencia") +
+    y = "Frecuencia",
+    caption = "Figura 1: frecuencia total de términos seleccionados"
+    ) +
   theme_minimal(base_size = 14) +
   theme(
     panel.grid.major.x = element_blank(),

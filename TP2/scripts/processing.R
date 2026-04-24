@@ -9,13 +9,9 @@
 ############# Librerias ############# 
 
 library(tidyverse)  # Manipulación de datos
-library(rvest)      # Web scraping
-library(httr2)      # Requests HTTP
 library(tidytext)   # Análisis de texto
 library(udpipe)     # Lematización
-library(robotstxt)  # Verificar permisos de scraping
 library(here)       # Manejo de rutas de archivos
-library(xml2)       # Manejo de HTML (guardar la página completa x ej)
 
 ############# creo carpeta output ############# 
 data_dir <- here("TP2", "data") #para leer el rds
