@@ -1,0 +1,305 @@
+# TP 3 - MVD
+
+---
+title: "Trabajo Práctico Individual Nº 3"
+subtitle: "Regresión Logística - Adult Census Income USA"
+author: "Francesca Nonide"
+date: "`r Sys.Date()`"
+lang: es
+
+execute:
+  echo: true
+  output: true
+  eval: true
+  cache: true
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-location: left
+    toc-title: "Contenidos"
+    code-fold: false
+    code-tools: true
+    df-print: paged
+    
+    embed-resources: true
+    include-in-header:
+      text: |
+        <style>
+        body {
+          text-align: justify;
+        }
+        </style>
+---
+
+#  Preparación, carga y limpieza de datos
+
+### Librerias
+
+```{r}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+  tidyverse,
+  here,
+  broom, 
+  ggplot2,
+  marginaleffects, 
+  patchwork)
+
+```
+
+### Creo carpeta "data" y cargo datos
+
+```{r}
+
+data_dir <- here("TP3", "data")
+
+#si no existe la carpeta que se cree
+if (!dir.exists(data_dir)) {
+  dir.create(data_dir)
+  message("Creando carpeta:", data_dir)
+  } else {
+  message("La carpeta ya existe")}
+
+#cargo los datos 
+USA <- read_csv(here("TP3", "data", "adult_census_USA.csv"))
+```
+
+Objetivo: modelar la probabilidad de que un ciudadano tenga ingresos superiores a los \$50,000 (dólares) anuales (variable objetivo dicotómica: \>50K vs \<=50K), utilizando predictores demográficos y laborales
+
+-   Qué factores sociodemográficos y laborales determinan que un ciudadano pertenezca al estrato de altos ingresos
+
+    -   H1: educación alta (educacion alta mayores ingresos). Var: education
+
+    -   H2: género (hombres mayores ingresos). Var: sex
+
+    -   H3: pais nativo (si es de USA mayores ingresos). Var: native_country
+
+    -   H4: raza (si White, mayores ingresos). Var: race
+
+    -   H4: edad (a mayor edad, mayores ingresos). Var: age
+
+    -   H5: horas trabajadas (a más horas, mayores ingresos pero el efecto es distinto segun el sexo). Var hours_per_week
+
+### Datos Balanceados y variables
+
+```{r}
+glimpse(USA)
+table(USA["native_country"])
+table(USA["race"])
+table(USA["education"])
+table(USA["sex"])
+table(USA["income"])
+
+datos_usa <- USA %>%
+  mutate(
+    #ifelse (condicion, valor_true, valor_false)
+    #INGRESO
+    ingreso = factor(income, levels = c("<=50K", ">50K")),
+    #binaria: ingreso alto 1 sino 0 
+    #ingreso_alto = ifelse(income == ">50K", 1, 0),
+    
+    #EDUCACION
+    nivel_edu = case_when(
+      education %in% c("Preschool", "1st-4th", "5th-6th", "7th-8th",
+                       "9th", "10th", "11th", "12th") ~ "baja",
+      education %in% c("HS-grad", "Some-college","Assoc-voc","Assoc-acdm") ~ "media",
+      education %in% c("Bachelors", "Masters", "Prof-school", "Doctorate") ~ "alta"),
+   
+    nivel_edu = factor(nivel_edu, levels = c("media", "baja", "alta")),
+    
+   #PAIS NATIVO 
+   native_country = if_else(native_country == "United-States", 
+                             "United-States", "Other"),
+   native_country = factor(native_country, levels = c("Other", "United-States")),
+   
+   #RAZA
+   race = if_else(race == "White", "White", "Other"),
+   race = factor(race, levels = c("Other", "White")),
+   
+   #GENERO
+   sex = factor(sex, levels = c("Female", "Male")), #female como ref 
+  )
+
+#Comprobamos el balance de nuestra variable objetivo
+message("Distribución de la variable objetivo:")
+print(table(datos_usa$ingreso))
+
+#verificar si quedo bien
+message("Verificamos el nuevo dataframe:")
+
+datos_usa %>% select(nivel_edu, native_country, race, sex, income) %>% 
+  summary()
+
+```
+
+Vemos que los datos se encuentran balanceados ya que hay 8258 observaciones con ingresos menores o iguales a 50k y 7508 observaciones con ingresos mayores a 50k (ingresos altos).
+
+Clasificamos nivel educativo según la estructura formal del sistema educativo. Se categoriza como educacion baja a quienes no completaron la educacion secundaria (preschool a 12th grade), como categoria media a quienes finalizaron el secundario e hicieron algun nivel terciario (desde HS-grad, some-college, Assoc-voc, Assoc-acdm) y educacion alta a quines obtuvieron un titulo universitario de grado o posgrado (bachelors, masters, Prof-school, Doctorate). Al evaluar la distribucion de nivel educativo, vemos que la categoria baja solo concentra 1505 observaciones, mientras que la media 9114 y la alta 5147. Dado que la categoria de referencia en un modelo *logit* es con la que vamos a comparar las demas, utilizar el nivel educativo bajo como referencia implicaria estimaciones menos estables. Por lo msimo, definimos media como categoria de referencia al ser de las mas representativas de la poblacion.
+
+Respecto a la variable native_country, fue simplificada a dos categorias, quedando 14468 observaciones para observaciones estadounidenses y 1298 para otras nacionalidades. La variable race tambien fue simplificada, quedando en 13856 observaciones para blancos y 1910 observaciones de otra raza (afroamericanos, asiaticos, entre otros)
+
+# Analisis exploratorio y Decisiones de transformacion 
+
+[**Nivel Educativo vs income (Gráfico de Barras Proporcional)**]{.underline}
+
+```{r}
+#definimos paleta de colores consistentes para todo el notebook
+message("Paleta de colores creada")
+paleta_income <- c(">50K" = "#458b00", "<=50K" = "#B2182B")
+
+# Comprobamos la distribución de ingreso según nivel educativo
+message("Distribución de la variable objetivo según nivel educativo:")
+vis_edu <- datos_usa %>%
+  ggplot(aes(x = nivel_edu, fill = ingreso)) +
+  geom_bar(position = "fill", alpha = 0.8, color = "white") +
+  scale_fill_manual(values = paleta_income, name = "Ingreso") +
+  scale_y_continuous(labels = scales::label_percent()) +
+  labs(
+    title = "Ingreso por Nivel Educativo",
+    x = "Nivel educativo (educación baja, media, alta)",
+    y = "Ingreso"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    panel.grid.major.x = element_blank() # Limpiamos la grilla vertical en barras
+  )
+vis_edu
+```
+
+[**Sexo vs income (Gráfico de Barras Proporcional)**]{.underline}
+
+```{r}
+# Comprobamos la distribución de ingreso según genero
+message("Distribución de la variable objetivo según genero:")
+vis_sex <- datos_usa %>%
+  ggplot(aes(x = sex, fill = ingreso)) +
+  geom_bar(position = "fill", alpha = 0.8, color = "white") +
+  scale_fill_manual(values = paleta_income, name = "Ingreso") +
+  scale_y_continuous(labels = scales::label_percent()) +
+  labs(
+    title = "Ingreso por Género",
+    x = "Género",
+    y = "Ingreso"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    panel.grid.major.x = element_blank() # Limpiamos la grilla vertical en barras
+  )
+vis_sex
+```
+
+[**País nativo vs income (Gráfico de Barras Proporcional)**]{.underline}
+
+```{r}
+# Comprobamos la distribución de ingreso según país nativo
+message("Distribución de la variable objetivo según país nativo:")
+vis_country <- datos_usa %>%
+  ggplot(aes(x = native_country, fill = ingreso)) +
+  geom_bar(position = "fill", alpha = 0.8, color = "white") +
+  scale_fill_manual(values = paleta_income, name = "Ingreso") +
+  scale_y_continuous(labels = scales::label_percent()) +
+  labs(
+    title = "Ingreso según país nativo (Estadounidense - otros)",
+    x = "País Nativo",
+    y = "Ingreso"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    panel.grid.major.x = element_blank() # Limpiamos la grilla vertical en barras
+  )
+vis_country
+```
+
+[**Raza vs income (Gráfico de Barras Proporcional)**]{.underline}
+
+```{r}
+# Comprobamos la distribución de ingreso según raza
+message("Distribución de la variable objetivo según raza:")
+vis_race <- datos_usa %>%
+  ggplot(aes(x = race, fill = ingreso)) +
+  geom_bar(position = "fill", alpha = 0.8, color = "white") +
+  scale_fill_manual(values = paleta_income, name = "Ingreso") +
+  scale_y_continuous(labels = scales::label_percent()) +
+  labs(
+    title = "Ingreso según raza",
+    x = "Raza",
+    y = "Ingreso"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    panel.grid.major.x = element_blank() # Limpiamos la grilla vertical en barras
+  )
+vis_race
+```
+
+[**Edad vs income (Density Plot)**]{.underline}
+
+```{r}
+# Comprobamos esc. descriptiva de edad segun ingreso 
+message("Estadistica descriptiva de edad según ingreso:")
+vis_age <- datos_usa %>%
+  ggplot(aes(x = age, fill = ingreso, color = ingreso)) +
+  geom_density(alpha = 0.5, linewidth = 0.8) +
+  scale_fill_manual(values = paleta_income, name = "Ingreso") +
+  scale_color_manual(values = paleta_income, name = "Ingreso") +
+  labs(
+    title = "Distribución por Edad",
+    x = "Edad (años)",
+    y = "Densidad"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    legend.position = "bottom"
+  )
+vis_age
+```
+
+[**Horas por semana vs income (Violin + Boxplot)**]{.underline}
+
+```{r}
+# Comprobamos esc. descriptiva de horas trabajadas segun ingreso 
+message("Estadistica descriptiva de horas trabajadas por semana según ingreso:")
+
+vis_hours <- datos_usa %>% 
+  ggplot(aes(x = ingreso, y = hours_per_week, fill = ingreso, color = ingreso)) +
+  geom_violin(alpha = 0.3, linewidth = 0.5, width = 0.8) +
+  geom_boxplot(width = 0.2, alpha = 0.8, color = "gray20", outlier.shape = NA) +
+  scale_fill_manual(values = paleta_income, guide = "none") +
+  scale_color_manual(values = paleta_income, guide = "none") +
+  labs(
+    title = "Ingreso por horas trabajadas",
+    x = "Ingreso",
+    y = "Horas trabajadas por semana"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(face = "bold", size = 15))
+vis_hours
+
+message("Chequeamos valores medianos de horas trabajadas por semana")
+datos_usa %>% 
+  group_by(ingreso) %>% 
+  summarise(
+    mediana_horas = median(hours_per_week, na.rm = TRUE))
+
+```
+
+### [**INTERPRETACIONES DE LAS VISUALIZACIONES BIVARIADAS:**]{.underline}
+
+1.  **Nivel educativo:** A mayor nivel educativo, mayor proprocion de ingresos altos. La diferencia es marcada y, en niveles de educación bajos, hay pocas observaciones que superen los 50k de ingresos. Vemos que quienes itenen niveles de educacion alta son los que en mayorita reciben ingresos altos.
+2.  **Género:** Las mujeres tienen una proporcion de ingresos altos de 25% mientras que los hombres llegan a más de 50%. La brecha pronunciada sugiere que los hombres poseen en promedio más ingresos altos que las mujeres, por lo que podria ser una variable explicativa.
+3.  **Pais nativo:** Quienes nacieron en Estados Unidos tienen una proporcion de ingresos algo mayor que quienes no pero la diferencia entre ambos grupos no parece ser muy marcada.
+4.  **Raza:** Dentro del grupo "White", la proporcion de observaciones que poseen ingresos \>50k es mayor que dentro del grupo que incluye otras razas.
+5.  **Edad:** Las personas con ingresos \<=50k se concentran en edades jovenes mientras que quienes tienen ingresos altos (\>50k) se concentran en edades adultas.
+6.   **Horas trabajadas:** La gran mayoria de observaciones con ingresos \<=50k trabajan alrededor de 40 hs. Quienes tienen ingresos altos trabajan en promedio más horas.
+
+A partir de las visualizaciones, evaluamos la idea de aplicar transformaciones logaritmicas en las variables continuas age y hours_peer_week pero no lo vimos necesario ya que la visualizacion de age se ve correctamente distribuida y en el caso de hours_peer_week, notamos que la mediana de horas trabajadas por semana es 40hs, lo cual se ve representado en la visulaizacion, por lo tanto tampoco se aplicará transformación logaritmica.
+
+A su vez, notamos que native_country no parecería ser una variable de interés para explicar las diferencias de ingresos ya que las diferencias entre ser estadounidense y ser nativo de otro pais no son visualmente pronunciadas, como si lo son las variables expuestas antes como educación, género o raza.
+
+Como término interactivo resultaria interesante interactuar horas trabajadas y sexo ya que se podria pensar que las mujeres tienen menor salario por hora trabajada, es decir, el efecto de hours_per_week en el ingreso podria estar siendo influenciado por el género. Asimismo, incluiremos un segundo término de interacción entre sex y nivel_edu, teniendo en cuenta que incluso teniendo niveles altos, las mujeres podrian enfrentarse a menores sueldos que los hombres con ingresos altos debido a barreras estructurales que suceden simplemente por el hecho de ser mujeres.
