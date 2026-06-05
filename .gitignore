@@ -4,3 +4,6 @@
 .Ruserdata
 .DS_Store
 .TP1/.DS_Store
+images
+census_income_usa_cache
+census_income_usa_fila

@@ -32,7 +32,7 @@ format:
         </style>
 ---
 
-#  Preparación, carga y limpieza de datos
+# Preparación, carga y limpieza de datos
 
 ### Librerias
 
@@ -140,7 +140,7 @@ Clasificamos nivel educativo según la estructura formal del sistema educativo. 
 
 Respecto a la variable native_country, fue simplificada a dos categorias, quedando 14468 observaciones para observaciones estadounidenses y 1298 para otras nacionalidades. La variable race tambien fue simplificada, quedando en 13856 observaciones para blancos y 1910 observaciones de otra raza (afroamericanos, asiaticos, entre otros)
 
-# Analisis exploratorio y Decisiones de transformacion 
+# Analisis exploratorio y Decisiones de transformacion
 
 [**Nivel Educativo vs income (Gráfico de Barras Proporcional)**]{.underline}
 
@@ -297,7 +297,7 @@ datos_usa %>%
 3.  **Pais nativo:** Quienes nacieron en Estados Unidos tienen una proporcion de ingresos algo mayor que quienes no pero la diferencia entre ambos grupos no parece ser muy marcada.
 4.  **Raza:** Dentro del grupo "White", la proporcion de observaciones que poseen ingresos \>50k es mayor que dentro del grupo que incluye otras razas.
 5.  **Edad:** Las personas con ingresos \<=50k se concentran en edades jovenes mientras que quienes tienen ingresos altos (\>50k) se concentran en edades adultas.
-6.   **Horas trabajadas:** La gran mayoria de observaciones con ingresos \<=50k trabajan alrededor de 40 hs. Quienes tienen ingresos altos trabajan en promedio más horas.
+6.  **Horas trabajadas:** La gran mayoria de observaciones con ingresos \<=50k trabajan alrededor de 40 hs. Quienes tienen ingresos altos trabajan en promedio más horas.
 
 A partir de las visualizaciones, evaluamos la idea de aplicar transformaciones logaritmicas en las variables continuas age y hours_peer_week pero no lo vimos necesario ya que la visualizacion de age se ve correctamente distribuida y en el caso de hours_peer_week, notamos que la mediana de horas trabajadas por semana es 40hs, lo cual se ve representado en la visulaizacion, por lo tanto tampoco se aplicará transformación logaritmica.
 
@@ -305,7 +305,7 @@ A su vez, notamos que native_country no parecería ser una variable de interés 
 
 Como término interactivo resultaria interesante interactuar horas trabajadas y sexo ya que se podria pensar que las mujeres tienen menor salario por hora trabajada, es decir, el efecto de hours_per_week en el ingreso podria estar siendo influenciado por el género. Asimismo, incluiremos un segundo término de interacción entre sex y nivel_edu, teniendo en cuenta que incluso teniendo niveles altos, las mujeres podrian enfrentarse a menores sueldos que los hombres con ingresos altos debido a barreras estructurales que suceden simplemente por el hecho de ser mujeres.
 
-# Ajuste de Modelos (Regresión Logística) 
+# Ajuste de Modelos (Regresión Logística)
 
 ### [**Categorías de referencia**]{.underline}
 
