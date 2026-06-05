@@ -424,6 +424,7 @@ df_plot_or <- broom::tidy(mod_int) |>
       .default = term # Salvavidas por si queda alguna sin clasificar
     )
   )
+message("Graficando OR:")
 
 ggplot(df_plot_or, aes(y = reorder(term_clean, estimate), x = estimate)) +
   # Línea vertical de referencia en OR = 1 (Efecto nulo)
@@ -441,10 +442,6 @@ ggplot(df_plot_or, aes(y = reorder(term_clean, estimate), x = estimate)) +
   
   # Punto del estimador central
   geom_point(color = "#D73027", size = 2) +
-  
-  # Escala logarítmica en X es CRUCIAL cuando se grafican Odds Ratios
-  # para que la distancia entre 0.5 y 1 sea visualmente igual a la de 1 a 2.
-  # Osea, que la chance sea la mitad, esta igual de lejos de que sea igual, que sea el doble 
   scale_x_log10() +
   
   labs(
@@ -482,3 +479,43 @@ ggplot(df_plot_or, aes(y = reorder(term_clean, estimate), x = estimate)) +
 El forest plot complementa el AME y nos permite ver los efectos de las interacciones en Odds Ratios. En primer lugar, podemos ver que la educacion alta (vs. media) es el predictor más fuerte, tal como se veia con el efecto marginal (está más a la derecha del OR = 1 y sus barras de error no cruzan la linea punteada). Esto tambien se ve en el sexo masculino, indicando que ser hombre aumenta las chances de tener ingresos altos respecto a ser mujer. A su vezm educación baja (vs. media) se ubica a la izquierda de OR = 1 con intervalos que tampoco cruzan la linea, por lo que reduce las chances.
 
 Al ver las interacciones, podemos ver que tanto Hombre x nivel_edubaja como *Hombre x nivel_edualta* tienen intervalos de confianza que cruzan 0R = 1, por lo que no podemos afirmar que el efecto del nivel educativo sobre las chances de tener ingresos altos difiera entre hombres y mujeres. Por otro lado, la interaccion horas x hombre tiene un estimador a la derecha de OR = 1 que no cruzan la linea, por lo que podemos afirmar que cada hora trabajada aumenta las chances de tener ingresos altos en hombres mas que en mujeres. Por ultimo, podemos ver que pais nativo cruza OR = 1, reforzando que no es una variable explicativa significativa para el nivel de ingreso.
+
+# Comparación global de modelos
+
+```{r}
+tabla_modelos <- bind_rows(
+  broom::glance(mod_base) %>% mutate(Modelo = "1. Sin Interacción"),
+  broom::glance(mod_int) %>% mutate(Modelo = "2. Con Interacción")
+) %>%
+  # Agregamos el cálculo del Pseudo R2 usando la fórmula de McFadden
+  mutate(pseudo_r2 = 1 - (deviance / null.deviance)) %>% 
+  # Seleccionamos las columnas que importan, sacando el BIC
+  select(Modelo, null.deviance, deviance, pseudo_r2, AIC, nobs) |> 
+  # Renombramos las columnas para la tabla final
+  rename(
+    `Deviance Nula` = null.deviance,
+    `Deviance Residual` = deviance,
+    `Pseudo-R² (McFadden)` = pseudo_r2,
+    `Observaciones` = nobs
+  ) %>% 
+  knitr::kable(
+    digits = c(0, 1, 1, 3, 1, 0), # Le damos 3 decimales al Pseudo-R2
+    caption = "Comparación Modelo Base vs. Modelo Interactivo"
+  ) %>% 
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"), 
+    full_width = FALSE,
+    position = "center"
+  ) %>% 
+  # Resaltamos la fila del modelo ganador
+  row_spec(
+    row = 2, 
+    bold = TRUE, 
+    color = "black", 
+    background = "#e6f2ff" 
+  )
+
+tabla_modelos
+```
+
+Finalmente, podemos concluir que incluir las interacciones mejora el modelo: Sabiendo que menor AIC indica que un modelo ajusta mejor (16861.6 frente a 16874.5, una diferencia mayor a 10 puntos) y que el pseudo-R2 levemente mejora (de 0.227 a 0.228), entendemos que el modelo con interacciones explica más la variacion en la VD.
