@@ -44,7 +44,8 @@ pacman::p_load(
   broom, 
   ggplot2,
   marginaleffects, 
-  patchwork)
+  patchwork,
+  kableExtra)
 
 ```
 
@@ -303,3 +304,181 @@ A partir de las visualizaciones, evaluamos la idea de aplicar transformaciones l
 A su vez, notamos que native_country no parecería ser una variable de interés para explicar las diferencias de ingresos ya que las diferencias entre ser estadounidense y ser nativo de otro pais no son visualmente pronunciadas, como si lo son las variables expuestas antes como educación, género o raza.
 
 Como término interactivo resultaria interesante interactuar horas trabajadas y sexo ya que se podria pensar que las mujeres tienen menor salario por hora trabajada, es decir, el efecto de hours_per_week en el ingreso podria estar siendo influenciado por el género. Asimismo, incluiremos un segundo término de interacción entre sex y nivel_edu, teniendo en cuenta que incluso teniendo niveles altos, las mujeres podrian enfrentarse a menores sueldos que los hombres con ingresos altos debido a barreras estructurales que suceden simplemente por el hecho de ser mujeres.
+
+# Ajuste de Modelos (Regresión Logística) 
+
+### [**Categorías de referencia**]{.underline}
+
+Las categorías de referencia seleccionadas fueron, para nivel_edu "media" (al ser la más representativa), para sex "Female", para race y para native_country "Other". Estas decisiones ya fueron definidas en la seccion anterior al hacer los factores.
+
+### [Modelo base]{.underline}
+
+```{r}
+
+mod_base <- glm(ingreso ~ nivel_edu + sex + race + native_country + age + hours_per_week, data = datos_usa, family = binomial)
+message("Modelo base:")
+
+summary(mod_base)
+```
+
+**INTERPRETACIÓN:** En el modelo base podemos ver que todas las variables son significativas (p valor bajo) excepto *native_country* que, como suponiamos en la visualizacion anterior, no es signficativa ya que tiene un p = 0.129 (no podemos afirmar que ser estadounidense tenga un efecto estadisticamente significativo sobre el log-odds de tener ingresos altos, en relacion a la categoria de referencia que es ser no nativo). Con el resto de la variables vemos que la educacion baja reduce el log-odds de ingresos altos (en relacion a la media) y que la educacion alta aumenta los log-odds de ingresos altos (en relacion a la educacion media). A su vez, ser hombre aumenta el log-odds (en relacion a ser mujer), y tanto la edad como las horas trabajadas semanalmente tienen efectos positivos sobre el log-odds. La cuantificacion precisa de estos efectos en probabildiad (y no en chances) se hara en la proxima seccion con AME.
+
+### [**Modelo interactivo**]{.underline}
+
+```{r}
+mod_int <- glm(ingreso ~ race + native_country + age + hours_per_week*sex + sex*nivel_edu, data = datos_usa, family = binomial)
+
+message("Modelo con interacción:")
+summary(mod_int)
+```
+
+**INTERPRETACIÓN:** Al interpretar los resutlados del modelo con interacciones podemos notar que **`sex*nivel_edubaja`** *y* **`sex*nivel_edualta`**no son significativas, por lo que no encontramos evidencia de que el efecto del nviel educativo en las chances de tener ingresos altos difiera según el género. Sin embargo, la interacción **`hours_per_week*sex`** *e*s estadisticamente **significativo** y tiene un coef **positivo** por lo que podemos sugerir que [el efecto de la cantidad de horas trabajadas sobre las chances de tener ingresos altos es mayor para los hombres]{.underline}
+
+En relacion al modelo base podemos ver que disminuye la signfiicancia estadistica del género (P= \<2e-16 a P = 0.0387), lo que sugiere que parte de su significancia respecto del género sobre el ingreso en el modelo base estaba siendo capturado por las horas de trabajo semanales.
+
+# Efectos marginales
+
+```{r}
+
+# Calculamos el AME estándar para las var continuas y categóricas
+ame_estandar <- avg_slopes(
+  mod_int,
+  variables = c("race","native_country", "age","hours_per_week", "sex", "nivel_edu"),
+  slope = "dydx"
+)
+message("Calculando AME:")
+# Lo mostramos en una tabla limpia
+ame_estandar |> 
+  select(term, contrast, estimate, conf.low, conf.high, p.value) |> 
+  
+  mutate(
+    # Multiplicamos por 100 y le pegamos el símbolo % para lectura humana
+    estimate_pct = paste0(round(estimate * 100, 2), "%"),
+    interpretacion = case_when(
+      estimate > 0 & p.value < 0.05 ~ "Aumenta prob. (Sig.)",
+      estimate < 0 & p.value < 0.05 ~ "Reduce prob. (Sig.)",
+      TRUE ~ "No significativo")
+  ) %>% 
+  select(
+    term, contrast, estimate_pct, conf.low, conf.high, p.value, interpretacion) %>% 
+  
+  rename(
+    `Predictor` = term,
+    `Contraste` = contrast,
+    `Efecto (Prob)` = estimate_pct,
+    `IC Inferior` = conf.low,
+    `IC Superior` = conf.high,
+    `Valor p` = p.value,
+    `Interpretación` = interpretacion) %>%  
+  
+  knitr::kable(
+    digits = 4, 
+    caption = "Efectos Marginales Promedio (Cambio en Probabilidad)") %>%  
+  
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"), 
+    full_width = FALSE,
+    position = "center"
+  ) %>%  
+  # Sombreado azul clarito para las filas significativas
+  row_spec(
+    row = which(ame_estandar$p.value < 0.05), 
+    bold = TRUE, 
+    color = "black", 
+    background = "#e6f2ff"
+  )
+```
+
+# Forest plot
+
+```{r}
+# Extraemos los coeficientes y calculamos los intervalos manualmente
+# para tener control total sobre los niveles (80%, 95%, 99%)
+df_plot_or <- broom::tidy(mod_int) |> 
+  filter(!term %in% c("(Intercept)", "statusquo")) |> 
+  mutate(
+    # Calculamos los límites en log-odds usando cuantiles de la distribución normal
+    lo_80 = estimate - qnorm(0.90) * std.error,
+    hi_80 = estimate + qnorm(0.90) * std.error,
+    lo_95 = estimate - qnorm(0.975) * std.error,
+    hi_95 = estimate + qnorm(0.975) * std.error,
+    lo_99 = estimate - qnorm(0.995) * std.error,
+    hi_99 = estimate + qnorm(0.995) * std.error,
+    
+    # Exponenciamos todo para pasarlo a escala de Odds Ratios
+    across(c(estimate, starts_with("lo_"), starts_with("hi_")), exp),
+    
+    # Etiquetas limpias para el gráfico
+    term_clean = case_match(
+      term,
+      "age" ~ "Edad (Años)",
+      "native_countryUnited-States" ~ "País nativo (Estados Unidos vs. Otro",
+      "raceWhite" ~ "Raza (Blanco vs. Otro)",
+      "sexMale" ~ "Sexo (Hombre vs Mujer)",
+      "nivel_edubaja" ~ "Educación (Baja vs. Media)",
+      "nivel_edualta" ~ "Educación (Alta vs. Media)",
+      "hours_per_week" ~ "Horas por semana",
+      "hours_per_week:sexMale" ~ "Interacción: Horas × Hombre",
+      "sexMale:nivel_edubaja" ~ "Interacción: Hombre × Edu. Baja",
+      "sexMale:nivel_edualta" ~ "Interacción: Hombre × Edu. Alta",
+      .default = term # Salvavidas por si queda alguna sin clasificar
+    )
+  )
+
+ggplot(df_plot_or, aes(y = reorder(term_clean, estimate), x = estimate)) +
+  # Línea vertical de referencia en OR = 1 (Efecto nulo)
+  geom_vline(xintercept = 1, linetype = "dashed", color = "gray40", linewidth = 1) +
+  
+  # Barra 99% (Fina y clara)
+  geom_linerange(aes(xmin = lo_99, xmax = hi_99), color = "#74ADD1", 
+                 height = 0, linewidth = 0.6) +
+  # Barra 95% (Media)
+  geom_linerange(aes(xmin = lo_95, xmax = hi_95), color = "#4575B4", 
+                 height = 0, linewidth = 1.2) +
+  # Barra 80% (Gruesa y oscura)
+  geom_linerange(aes(xmin = lo_80, xmax = hi_80), color = "#313695", 
+                 height = 0, linewidth = 2.2) +
+  
+  # Punto del estimador central
+  geom_point(color = "#D73027", size = 2) +
+  
+  # Escala logarítmica en X es CRUCIAL cuando se grafican Odds Ratios
+  # para que la distancia entre 0.5 y 1 sea visualmente igual a la de 1 a 2.
+  # Osea, que la chance sea la mitad, esta igual de lejos de que sea igual, que sea el doble 
+  scale_x_log10() +
+  
+  labs(
+    title = "Odds Ratios del modelo interactivo",
+    subtitle = "Barras de error graduadas: 80% (gruesa), 95% (media), 99% (fina)",
+    x = "Odds Ratio (Escala Logarítmica)",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank(),
+    axis.text.y = element_text(face = "bold", size = 11),
+    axis.text.x = element_text(size = 11)
+  )
+```
+
+# Interpretación
+
+-   **`sex`** **(male-female):** en promedio, ser hombre [aumenta]{.underline} la probabilidad de tener ingresos altos en 21.46 pp. en relacion a ser mujer.
+
+-   **`race`** **(white-other):** ser blanco [aumenta]{.underline} la probabilidad de tener ingresos altos en 4.96 pp. respecto a otras razas.
+
+-   **`nivel_edu`** **(baja-media):** tener educacion baja [reduce]{.underline} la probabilidad de tener ingresos altos en 24.01pp respecto a la educación media.
+
+-   **`nivel_edu`** **(alta-media):** tener educacion alta [aumenta]{.underline} la probabilidad de tener ingresos altos en 27.1pp respecto a la educación media.
+
+-   **`hours_peer_week`:** una hora adicional de trabajo por semana [aumenta]{.underline} la probabilidad de tener ingresos altos en 0.67pp.
+
+-   **`age`:** un año adicional de edad [aumenta]{.underline} la probabilidad de tener ingresos altos en 0.91pp.
+
+-   **`native_country` (united-states-other):** ser estadounidense en comparacion con ser de otro pais [no tiene un efecto estadisticamente significativo]{.underline} sobre la probabilidad de ingresos altos.
+
+El forest plot complementa el AME y nos permite ver los efectos de las interacciones en Odds Ratios. En primer lugar, podemos ver que la educacion alta (vs. media) es el predictor más fuerte, tal como se veia con el efecto marginal (está más a la derecha del OR = 1 y sus barras de error no cruzan la linea punteada). Esto tambien se ve en el sexo masculino, indicando que ser hombre aumenta las chances de tener ingresos altos respecto a ser mujer. A su vezm educación baja (vs. media) se ubica a la izquierda de OR = 1 con intervalos que tampoco cruzan la linea, por lo que reduce las chances.
+
+Al ver las interacciones, podemos ver que tanto Hombre x nivel_edubaja como *Hombre x nivel_edualta* tienen intervalos de confianza que cruzan 0R = 1, por lo que no podemos afirmar que el efecto del nivel educativo sobre las chances de tener ingresos altos difiera entre hombres y mujeres. Por otro lado, la interaccion horas x hombre tiene un estimador a la derecha de OR = 1 que no cruzan la linea, por lo que podemos afirmar que cada hora trabajada aumenta las chances de tener ingresos altos en hombres mas que en mujeres. Por ultimo, podemos ver que pais nativo cruza OR = 1, reforzando que no es una variable explicativa significativa para el nivel de ingreso.
