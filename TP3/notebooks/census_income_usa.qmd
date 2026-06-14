@@ -1,4 +1,4 @@
-# TP 3 - MVD
+# 
 
 ---
 title: "Trabajo Práctico Individual Nº 3"
@@ -290,6 +290,56 @@ datos_usa %>%
 
 ```
 
+[**Horas trabajadas e ingreso según género**]{.underline}
+
+```{r}
+# Justificación visual de la interacción
+vis_interaccion <- datos_usa %>%
+  ggplot(aes(x = ingreso, y = hours_per_week, fill = ingreso, color = ingreso)) +
+  geom_violin(alpha = 0.3, linewidth = 0.5, width = 0.8) +
+  geom_boxplot(width = 0.2, alpha = 0.8, color = "gray20", outlier.shape = NA) +
+  # Facetamos por sexo para ver si la distribución cambia
+  facet_wrap(~sex) +
+  scale_fill_manual(values = paleta_income, guide = "none") +
+  scale_color_manual(values = paleta_income, guide = "none") +
+  labs(
+    title = "Horas trabajadas según ingreso, separado por sexo",
+    x = "Ingreso",
+    y = "Horas por semana"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    strip.text = element_text(face = "bold", size = 13)
+  )
+
+vis_interaccion
+```
+
+[**Nivel educativo e ingreso según género**]{.underline}
+
+```{r}
+vis_interaccion_edu <- datos_usa %>%
+  ggplot(aes(x = nivel_edu, fill = ingreso)) +
+  geom_bar(position = "fill", alpha = 0.8, color = "white") +
+  facet_wrap(~ sex) +
+  scale_fill_manual(values = paleta_income, name = "Ingreso") +
+  scale_y_continuous(labels = scales::label_percent()) +
+  labs(
+    title = "Ingreso por nivel educativo, separado por sexo",
+    x = "Nivel educativo",
+    y = "Proporción"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    panel.grid.major.x = element_blank(),
+    strip.text = element_text(face = "bold", size = 13)
+  )
+
+vis_interaccion_edu
+```
+
 ### [**INTERPRETACIONES DE LAS VISUALIZACIONES BIVARIADAS:**]{.underline}
 
 1.  **Nivel educativo:** A mayor nivel educativo, mayor proprocion de ingresos altos. La diferencia es marcada y, en niveles de educación bajos, hay pocas observaciones que superen los 50k de ingresos. Vemos que quienes itenen niveles de educacion alta son los que en mayorita reciben ingresos altos.
@@ -303,7 +353,9 @@ A partir de las visualizaciones, evaluamos la idea de aplicar transformaciones l
 
 A su vez, notamos que native_country no parecería ser una variable de interés para explicar las diferencias de ingresos ya que las diferencias entre ser estadounidense y ser nativo de otro pais no son visualmente pronunciadas, como si lo son las variables expuestas antes como educación, género o raza.
 
-Como término interactivo resultaria interesante interactuar horas trabajadas y sexo ya que se podria pensar que las mujeres tienen menor salario por hora trabajada, es decir, el efecto de hours_per_week en el ingreso podria estar siendo influenciado por el género. Asimismo, incluiremos un segundo término de interacción entre sex y nivel_edu, teniendo en cuenta que incluso teniendo niveles altos, las mujeres podrian enfrentarse a menores sueldos que los hombres con ingresos altos debido a barreras estructurales que suceden simplemente por el hecho de ser mujeres.
+Como término interactivo resultaria interesante interactuar horas trabajadas y sexo ya que se podria pensar que las mujeres tienen menor salario por hora trabajada, es decir, el efecto de hours_per_week en el ingreso podria estar siendo influenciado por el género. Sin embargo, al hacer una visualización bivariada podemos notar que las cajas se solapan entre hombres y mujeres, es decir, que las distribuciones son muy similares. Esto sugiere que el efecto puede ser pequeño ya que no resulta evidente a simple vista. Sin embargo, realizaremos el término de interaccion para verificar su signficacncia estadistica.
+
+Asimismo, incluiremos un segundo término de interacción entre sex y nivel_edu, teniendo en cuenta que incluso teniendo niveles altos, las mujeres podrian enfrentarse a menores sueldos que los hombres con ingresos altos debido a barreras estructurales que suceden simplemente por el hecho de ser mujeres. Al realizar la visualización destacamos que efectivamente el patron difiere entre hombres y mujeres y que, aun en educación alta, las mujeres tienen una proporción de ingresos altos menor que los hombres con igual nivel educativo.
 
 # Ajuste de Modelos (Regresión Logística)
 
